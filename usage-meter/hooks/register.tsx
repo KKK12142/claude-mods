@@ -140,10 +140,10 @@ export const register: Register = on => {
     return { text: hide ? 'usage-meter 숨김' : 'usage-meter 표시' }
   })
 
-  // 입력창 아래 힌트 줄('? for shortcuts')의 글자는 그대로 두고 뒤에 미터를 붙인다
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+  // 입력창 바로 위 한 줄
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const m = await read($, meter)
-    if (m === null || (await read($, isHidden))) {
+    if (e.props.hasSurvey || m === null || (await read($, isHidden))) {
       return next(e)
     }
 
@@ -153,14 +153,12 @@ export const register: Register = on => {
 
     const model = info.model === null ? null : prettyModel(info.model)
     const options = layouts(model, info.effort, m.context.percent ?? 0, m.rateLimits[0], now)
-    const hint = e.props.hint
-    const room = (e.viewport?.columns ?? Infinity) - (hint === '' ? 0 : cells(hint) + 3) - 1
+    // 좌우 여백 2칸 + 엔진이 옆에 그리는 접기 버튼 [-] 자리 4칸 + 여유 1칸
+    const room = (e.viewport?.columns ?? Infinity) - 7
     const segs = options.find(option => widthOf(option) <= room) ?? options[options.length - 1]!
 
     return (
-      <Box flexDirection="row" flexWrap="nowrap" gap={1} overflow="hidden">
-        {hint !== '' && <Text dimColor>{hint}</Text>}
-        {hint !== '' && <Text> </Text>}
+      <Box flexDirection="row" flexWrap="nowrap" gap={1} paddingX={1} overflow="hidden">
         {segs.map(seg => (
           <Text color={seg.color} bold={seg.bold} dimColor={seg.dim} wrap="truncate-end">
             {seg.text}

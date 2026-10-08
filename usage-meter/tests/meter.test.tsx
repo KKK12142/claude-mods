@@ -1,8 +1,8 @@
 import { test, expect } from 'claude-code/testing'
 
-const HINT = {
-  component: 'PromptHint',
-  props: { isDraft: false, isWorking: false, hint: '? for shortcuts' },
+const BAND = {
+  component: 'AbovePrompt',
+  props: { hasSurvey: false, isWorking: false },
 } as const
 
 test('one line: model, effort, context and 5-hour limit; weekly hidden; toggles', async ($, on) => {
@@ -28,11 +28,11 @@ test('one line: model, effort, context and 5-hour limit; weekly hidden; toggles'
   for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', effort: 'high', messageCount: 1 } as never)) void _
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'usage-meter', surface, ...HINT })
+    const ui = await $.ui.mount({ plugin: 'usage-meter', surface, ...BAND })
     expect(await ui.find({ type: 'Text', text: 'Opus 5.5' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '· high' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '60%' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '? for shortcuts' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '컨텍스트' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '42%' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '↻2h30m' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '92%' })).toBeUndefined()
@@ -40,19 +40,19 @@ test('one line: model, effort, context and 5-hour limit; weekly hidden; toggles'
   }
 
   // 좁은 화면: 짧은 라벨로 한 줄에 맞춘다
-  const narrow = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', ...HINT, viewport: { columns: 70, rows: 30 } } as never)
+  const narrow = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', ...BAND, viewport: { columns: 64, rows: 30 } } as never)
   expect(await narrow.find({ type: 'Text', text: 'ctx' })).toBeDefined()
   expect(await narrow.find({ type: 'Text', text: '컨텍스트' })).toBeUndefined()
   await narrow.unmount()
 
-  const tiny = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', ...HINT, viewport: { columns: 50, rows: 30 } } as never)
+  const tiny = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', ...BAND, viewport: { columns: 45, rows: 30 } } as never)
   expect(await tiny.find({ type: 'Text', text: '60%' })).toBeDefined()
   expect(await tiny.find({ type: 'Text', text: '↻2h30m' })).toBeUndefined()
   await tiny.unmount()
 
   const off = await $.command.run({ command: 'usage-meter', args: 'off' } as never)
   expect(off.text).toBe('usage-meter 숨김')
-  const hidden = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', ...HINT })
+  const hidden = await $.ui.mount({ plugin: 'usage-meter', surface: 'terminal', ...BAND })
   expect(await hidden.find({ type: 'Text', text: '60%' })).toBeUndefined()
   await hidden.unmount()
 })

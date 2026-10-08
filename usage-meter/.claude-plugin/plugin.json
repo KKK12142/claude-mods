@@ -1,7 +1,7 @@
 {
   "name": "usage-meter",
-  "version": "0.2.0",
-  "description": "On the hint line under the prompt: model, effort, context fill and the 5-hour limit",
+  "version": "0.3.0",
+  "description": "One line above the prompt: model, effort, context fill and the 5-hour limit",
   "author": {
     "name": "KKK12142"
   },

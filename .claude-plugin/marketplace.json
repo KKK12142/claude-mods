@@ -8,7 +8,7 @@
     {
       "name": "usage-meter",
       "source": "./usage-meter",
-      "description": "On the hint line under the prompt: model, effort, context fill and the 5-hour limit"
+      "description": "One line above the prompt: model, effort, context fill and the 5-hour limit"
     }
   ]
 }
