@@ -1,0 +1,14 @@
+{
+  "name": "claude-mods",
+  "description": "Claude Code mods by KKK12142",
+  "owner": {
+    "name": "KKK12142"
+  },
+  "plugins": [
+    {
+      "name": "usage-meter",
+      "source": "./usage-meter",
+      "description": "On the hint line under the prompt: model, effort, context fill and the 5-hour limit"
+    }
+  ]
+}
