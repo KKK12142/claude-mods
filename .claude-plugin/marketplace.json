@@ -9,6 +9,11 @@
       "name": "usage-meter",
       "source": "./usage-meter",
       "description": "One line above the prompt: model, effort, context fill and the 5-hour limit"
+    },
+    {
+      "name": "prism-tree",
+      "source": "./prism-tree",
+      "description": "Themed file tree in the sidebar: git status, lines changed and a shimmer on files Claude touches, in six color presets"
     }
   ]
 }

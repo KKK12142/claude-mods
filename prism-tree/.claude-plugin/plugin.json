@@ -1,0 +1,76 @@
+{
+  "name": "prism-tree",
+  "version": "0.1.0",
+  "description": "A themed IDE-style file tree for Claude Code: git status, lines changed, and a shimmer on the files Claude reads and writes, in six color presets",
+  "author": {
+    "name": "KKK12142"
+  },
+  "types": "./types/index.d.ts",
+  "keywords": [
+    "file-tree",
+    "git",
+    "mod",
+    "pane",
+    "theme"
+  ],
+  "userConfig": {
+    "theme": {
+      "type": "string",
+      "title": "Theme",
+      "description": "Color preset for the tree, its git colors and the shimmer on files Claude touches. The ❖ button in the pane's header cycles presets too; a pick made there lasts until this option changes.",
+      "default": "aurora",
+      "options": [
+        "aurora",
+        "ember",
+        "forest",
+        "mono",
+        "paper",
+        "classic"
+      ]
+    },
+    "activity": {
+      "type": "string",
+      "title": "Claude activity",
+      "description": "Which of Claude's file activity shimmers in the tree: files read with the Read tool or Bash readers (rg, grep, find, cat), writes and git actions, each in its own tone of the theme",
+      "default": "reads and writes",
+      "options": [
+        "reads and writes",
+        "writes",
+        "reads",
+        "none"
+      ]
+    },
+    "glyphs": {
+      "type": "string",
+      "title": "Glyphs",
+      "description": "Icon set: auto uses Nerd Font icons when one is installed here, except in the desktop app; plain uses Unicode only",
+      "default": "auto",
+      "options": [
+        "auto",
+        "nerd",
+        "plain"
+      ]
+    },
+    "follow": {
+      "type": "string",
+      "title": "Follow Claude",
+      "description": "on: the tree scrolls to what Claude reads, writes or commits. off: the view stays where you put it and only your own scrolling moves it; highlights still show.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "column": {
+      "type": "string",
+      "title": "Right column",
+      "description": "What the right column shows by default: date (last modified) or size (files in bytes, folders as disk usage computed in the background). The header button toggles it.",
+      "default": "date",
+      "options": [
+        "date",
+        "size"
+      ]
+    }
+  },
+  "license": "MIT"
+}
