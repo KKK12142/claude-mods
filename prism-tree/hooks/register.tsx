@@ -36,6 +36,7 @@ const THEME = { plugin: 'prism-tree', key: 'theme' } as const
 const ACTIVITY = { plugin: 'prism-tree', key: 'activity' } as const
 const PANE = 'prism-tree'
 const THEME_STORE = 'theme'
+const ENABLED_STORE = 'enabled'
 const BRANCH_ROW = '#branch'
 const FLASH_MS = 2700
 const RUNNING_MAX_MS = 600_000
@@ -80,6 +81,9 @@ let pointer = true
 let view = { from: 0, max: 0 }
 let lastSync = 0
 let noDock = false
+let enabled = true
+let prepared = false
+let windows = false
 let home = ''
 let platform: Promise<'linux' | 'darwin' | 'win32'> | null = null
 let dirty: { root: string; files: Record<string, Change> } = { root: '', files: {} }
@@ -250,6 +254,7 @@ function refreshGit($: EngineInterface): Promise<void> {
 }
 
 async function reset($: EngineInterface, root: string, focus = false): Promise<void> {
+  if (!enabled) return
   const prev = await get($)
   generation += 1
   blink?.cancel()
@@ -919,6 +924,30 @@ async function cycleTheme($: EngineInterface): Promise<void> {
   $.ui.toast(`Theme: ${palette(picked).label}`)
 }
 
+async function prepare($: EngineInterface): Promise<void> {
+  prepared = true
+  pointer = await finePointerOk($)
+  try {
+    const remote = Boolean((await $.env.get('SSH_CONNECTION')) || (await $.env.get('SSH_TTY')))
+    noNerd = !remote && (windows || (await fontState($, 'f04eb')) !== 'ok')
+  } catch {
+    noNerd = true
+  }
+  await restoreTheme($)
+  const t = await get($)
+  if (t.flashOn) await patch($, () => ({ flash: [], flashDim: [], flashOn: false, flashTones: {} }))
+  await setActivities($, cur => cur.map(a => (a.state === 'running' ? { ...a, state: 'failed', label: `${a.kind} interrupted` } : a)))
+}
+
+async function setEnabled($: EngineInterface, on: boolean): Promise<void> {
+  enabled = on
+  try {
+    await $.store.set(ENABLED_STORE, on)
+  } catch {
+    // kept for this session only
+  }
+}
+
 function shortPath(path: string): string {
   return home && inside(home, path) ? `~${path.slice(home.length)}` : path
 }
@@ -932,23 +961,20 @@ export const register: Register = (on, options) => {
   optionTheme = isPreset(options?.theme) ? options.theme : DEFAULT_PRESET
   sizeDefault = options?.column === 'size'
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'prism-tree', description: 'Show the themed file tree; args: [path] (no path = cwd)' })
-    const windows = (await $.env.get('OS')) === 'Windows_NT'
+    await $.command.register({ name: 'prism-tree', description: 'Show or hide the themed file tree; args: on | off | [path] (no path = cwd)' })
+    windows = (await $.env.get('OS')) === 'Windows_NT'
     useDrives(windows)
     home = posix(((await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || '').replace(/[\\/]+$/, ''))
     activityId = Math.max(activityId, ...(await activities($)).map(a => a.id))
+    try {
+      enabled = (await $.store.get(ENABLED_STORE)) !== false
+    } catch {
+      enabled = true
+    }
+    if (!enabled) return next(e)
     void (async () => {
-      pointer = await finePointerOk($)
-      try {
-        const remote = Boolean((await $.env.get('SSH_CONNECTION')) || (await $.env.get('SSH_TTY')))
-        noNerd = !remote && (windows || (await fontState($, 'f04eb')) !== 'ok')
-      } catch {
-        noNerd = true
-      }
-      await restoreTheme($)
+      await prepare($)
       const t = await get($)
-      if (t.flashOn) await patch($, () => ({ flash: [], flashDim: [], flashOn: false, flashTones: {} }))
-      await setActivities($, cur => cur.map(a => (a.state === 'running' ? { ...a, state: 'failed', label: `${a.kind} interrupted` } : a)))
       const cwd = await cwdOf($)
       if (!t.root || t.nodes.length === 0 || (follow && t.root !== cwd)) await reset($, cwd)
       else if (!noDock) await $.ui.open({ id: PANE, title: `Files: ${t.root.split('/').pop() || t.root}` })
@@ -957,10 +983,21 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'prism-tree' }, async ($, e) => {
+    const word = (e.args ?? '').trim().toLowerCase()
+    if (word === 'off') {
+      await setEnabled($, false)
+      generation += 1
+      blink?.cancel()
+      blink = null
+      await $.ui.close({ id: PANE }).catch(() => undefined)
+      return { text: 'prism-tree off. It stays off in new sessions until /prism-tree on.' }
+    }
     if (!e.presentation.isFullscreen) return { text: 'prism-tree shows in the sidebar, which needs the fullscreen layout. Run /tui fullscreen, then /prism-tree.' }
     if (e.presentation.columns < 110) return { text: 'prism-tree shows in the sidebar, which needs a terminal at least 110 columns wide. Widen it, then run /prism-tree.' }
+    await setEnabled($, true)
+    if (!prepared) await prepare($)
     noDock = false
-    const arg = (e.args ?? '').trim()
+    const arg = word === 'on' ? '' : (e.args ?? '').trim()
     const cwd = await cwdOf($)
     follow = !arg
     const root = arg ? resolve(cwd, arg, home) : cwd
@@ -969,6 +1006,7 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', async ($, e, next) => {
+    if (!enabled) return next(e)
     if (e.tool !== 'Edit' && e.tool !== 'Write' && e.tool !== 'NotebookEdit' && e.tool !== 'Bash') return next(e)
     const command = e.tool === 'Bash' ? e.command : ''
     const cwd = e.tool === 'Bash' ? await cwdOf($) : ''
@@ -1020,7 +1058,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const result = await next(e)
-    if (result.deny || result.isError || e.tool !== 'Read' || !showReads) return result
+    if (!enabled || result.deny || result.isError || e.tool !== 'Read' || !showReads) return result
     void touched($, [posix(e.file_path)], 'purple', true)
     return result
   })
@@ -1073,6 +1111,7 @@ export const register: Register = (on, options) => {
 
   on('classic.SessionStart', async ($, e, next) => {
     const result = await next(e)
+    if (!enabled) return result
     if (e.source === 'clear' || e.source === 'resume' || e.source === 'fork') {
       void (async () => {
         await restoreTheme($)
@@ -1087,13 +1126,13 @@ export const register: Register = (on, options) => {
 
   on('classic.CwdChanged', async ($, e, next) => {
     const result = await next(e)
-    void followCwd($)
+    if (enabled) void followCwd($)
     return result
   })
 
   on('classic.FileChanged', async ($, e, next) => {
     const result = await next(e)
-    if (/[\\/]\.git[\\/]|[\\/](index|HEAD)$/.test(e.file_path)) $.clock.after(300, () => void sync($, true))
+    if (enabled && /[\\/]\.git[\\/]|[\\/](index|HEAD)$/.test(e.file_path)) $.clock.after(300, () => void sync($, true))
     return result
   })
 
@@ -1111,6 +1150,7 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
+    if (!enabled) return next(e)
     void settleBackground($, e.text)
     if (!(await followCwd($))) void sync($)
     const t = await get($)
@@ -1139,14 +1179,15 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.attachment', async ($, e, next) => {
+    if (!enabled) return next(e)
     void settleBackground($, e.text)
     return next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
-    if (e.surface === 'terminal' && e.props.placement === 'inline') {
-      noDock = true
+    if (!enabled || (e.surface === 'terminal' && e.props.placement === 'inline')) {
+      if (enabled) noDock = true
       void $.ui.close({ id: PANE }).catch(() => undefined)
       const { Box: Empty } = $.ui.resolve(e)
       return <Empty />

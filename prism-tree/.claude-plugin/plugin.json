@@ -1,6 +1,6 @@
 {
   "name": "prism-tree",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A themed IDE-style file tree for Claude Code: git status, lines changed, and a shimmer on the files Claude reads and writes, in six color presets",
   "author": {
     "name": "KKK12142"

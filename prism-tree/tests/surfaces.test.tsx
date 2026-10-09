@@ -21,6 +21,8 @@ type World = {
   duDelays?: number[]
   links?: string[]
   store?: Record<string, unknown>
+  // a live store the test reads back; replaces mock.store
+  saved?: Record<string, unknown>
 }
 type Ran = string[][]
 const opens: unknown[] = []
@@ -29,7 +31,14 @@ const envs: Record<string, string>[] = []
 function world(on: any, w: World, ran: Ran) {
   mock.env(on, w.env)
   const clock = mock.clock(on, { now: 1_800_000_000_000 })
-  mock.store(on, w.store)
+  if (w.saved) {
+    const saved = w.saved
+    on('store.get', (_$: any, e: any) => ({ value: saved[e.key] }))
+    on('store.set', (_$: any, e: any) => {
+      saved[e.key] = e.value
+      return { value: undefined }
+    })
+  } else mock.store(on, w.store)
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: w.cwd }))
   on('session.id', () => ({ value: 'test-session' }))
@@ -908,3 +917,47 @@ for (const os of ['linux', 'win32'] as const) {
     await ui.unmount()
   })
 }
+
+test('/prism-tree off closes the pane and stays off in new sessions; /prism-tree on brings it back', { timeoutMs: 20_000 }, async ($, on) => {
+  const ran: Ran = []
+  const root = '/home/k/proj'
+  const saved: Record<string, unknown> = { enabled: false }
+  const clock = world(on, { os: 'linux', env: { HOME: '/home/k' }, cwd: root, top: '', dirs: { [root]: [['a.ts', 'file']] }, status: '', numstat: '', saved }, ran)
+  on('classic.CwdChanged', () => ({}))
+  const closed: unknown[] = []
+  on('ui.close', (_$: any, e: any) => {
+    closed.push(e)
+    return { value: undefined } as any
+  })
+  const before = opens.length
+  await $.session.start({ cwd: root, surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  expect(opens.length).toBe(before)
+  await $.tool.call({ tool: 'Bash', command: 'echo hi > a.ts' } as any)
+  await $.prompt.submit({ text: 'hi', wait: false } as any)
+  await clock.settle()
+  expect(ran.some(a => a[0] === 'find' || a[0] === 'git')).toBe(false)
+
+  const r = await $.command.run(fullscreen('on'))
+  await clock.settle()
+  expect(JSON.stringify(r)).toContain('File tree on ~/proj')
+  expect(opens.length).toBeGreaterThan(before)
+  const ui = await $.ui.mount({ plugin: 'prism-tree', surface: 'terminal', component: 'Pane', requestId: 'prism-tree', props: paneProps(60) })
+  await clock.settle()
+  expect(await texts(ui)).toContain('a.ts')
+  expect(saved.enabled).toBe(true)
+
+  const off = await $.command.run({ command: 'prism-tree', args: ' OFF ', origin: { kind: 'person' }, presentation: { isFullscreen: false, columns: 80 } } as any)
+  await clock.settle()
+  expect(JSON.stringify(off)).toContain('prism-tree off')
+  expect(closed.length).toBeGreaterThan(0)
+  const opened = opens.length
+  ran.length = 0
+  await $.tool.call({ tool: 'Bash', command: 'echo hi > a.ts' } as any)
+  await $.classic.CwdChanged({ old_cwd: root, new_cwd: '/home/k' } as any)
+  await clock.settle()
+  expect(ran.some(a => a[0] === 'find' || a[0] === 'git')).toBe(false)
+  expect(opens.length).toBe(opened)
+  expect(saved.enabled).toBe(false)
+  await ui.unmount()
+})
