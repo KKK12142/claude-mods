@@ -112,3 +112,19 @@ test('API 오류면 오류 종류를 알려 준다', async ($, on) => {
   const r = await $.command.run({ command: 'bash-explain', args: 'git push --force' } as never)
   expect(r.text).toContain('(해설 요청이 실패해 사전 검사 결과만 보여요 · rate_limit 429)')
 })
+
+test('읽기만 하는 명령에는 주의 줄을 붙이지 않는다', async ($, on) => {
+  engine(on, () => `${SAFE_REPLY}\n주의: 파일을 만들거나 고치지 않으므로 되돌릴 것이 없다.`)
+
+  const r = await $.command.run({ command: 'bash-explain', args: 'ls -la' } as never)
+  expect(r.text).toContain('🟢 읽기만 · 현재 폴더의 파일 목록을 자세히 보여 줌')
+  expect(r.text).not.toContain('⚠')
+})
+
+test('사전 검사가 위험을 찾으면 모델이 낮음이라 해도 주의 줄은 남긴다', async ($, on) => {
+  engine(on, () => '위험도: 낮음\n요약: 빌드 정리\n- rm -rf build → 정리\n주의: build 폴더가 사라짐')
+
+  const r = await $.command.run({ command: 'bash-explain', args: 'rm -rf build' } as never)
+  expect(r.text).toContain('🔴 위험 · 빌드 정리')
+  expect(r.text).toContain('  ⚠ build 폴더가 사라짐')
+})

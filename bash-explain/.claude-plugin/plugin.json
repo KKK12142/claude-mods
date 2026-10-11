@@ -1,6 +1,6 @@
 {
   "name": "bash-explain",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Explains in Korean the shell command a permission dialog asks about: what it does, what it changes and how risky it is",
   "author": {
     "name": "KKK12142"

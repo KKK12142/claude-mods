@@ -32,7 +32,7 @@ export const SYSTEM = `너는 터미널 명령어 해설가다. 코딩 AI(Claude
 - 명령 조각 → 하는 일
 - (명령을 &&, ;, | 단위로 나눠 최대 5줄)
 왜: Claude가 이 명령을 쓰려는 이유를 짐작해 한 줄로
-주의: 되돌릴 수 없는 점이나 영향받는 범위를 한 줄로 (없으면 이 줄을 빼라)
+주의: 되돌릴 수 없는 점이나 영향받는 범위를 한 줄로 (위험도가 낮음이거나 조심할 점이 없으면 이 줄을 아예 빼라. "되돌릴 것이 없다", "안전하다" 같은 안심 문구는 쓰지 마라)
 
 위험도 기준
 - 높음: 삭제, 덮어쓰기, 강제 푸시, 관리자 권한, 인터넷에서 받은 코드 실행, 외부로 데이터 전송처럼 되돌리기 어려움
@@ -125,7 +125,8 @@ export const toNote = (r: Result): Note | undefined => {
               .filter(h => !ex.parts.some(part => part.startsWith(h.label.split(':')[0]!)))
               .map(h => h.label),
       why: ex.why,
-      caution: ex.caution,
+      // 읽기만 하는 명령의 주의 줄은 안심 문구뿐이라 뺀다
+      caution: r.risk === 'low' ? undefined : ex.caution,
       footer: `bash-explain · ${prettyModel(r.model ?? '')}`,
     }
   }
