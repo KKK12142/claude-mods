@@ -83,3 +83,32 @@ test('on / off와 상태 보기', async ($, on) => {
   expect((await $.command.run({ command: 'bash-explain', args: '' } as never)).text).toContain('bash-explain 꺼짐 · 일반 명령: Haiku 5.5 (low)')
   expect((await $.command.run({ command: 'bash-explain', args: 'on' } as never)).text).toBe('bash-explain 켜짐')
 })
+
+test('설정 화면에 모델 이름을 직접 쓴 값("Haiku 5.5")은 무시하고 기본 모델을 쓴다', { options: { model: 'Haiku 5.5', dangerModel: 'sonnet 5.5' } }, async ($, on) => {
+  const calls = engine(on, prompt => (prompt.includes('rm -rf') ? DANGER_REPLY : SAFE_REPLY))
+
+  await $.command.run({ command: 'bash-explain', args: 'ls -la' } as never)
+  await $.command.run({ command: 'bash-explain', args: 'rm -rf node_modules dist && npm ci' } as never)
+  expect(calls.map(c => c.model)).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5'])
+})
+
+test('모델을 쓸 수 없으면 그 이유를 알려 준다', async ($, on) => {
+  on('command.register', () => ({ value: {} }) as never)
+  on('session.cwd', () => ({ value: '/tmp/project' }) as never)
+  on('model.complete', () => ({ deny: 'blocked model' }))
+
+  const r = await $.command.run({ command: 'bash-explain', args: 'git push --force' } as never)
+  expect(r.text).toContain("(해설 모델 'claude-sonnet-5-5'을 쓸 수 없어 사전 검사 결과만 보여요")
+})
+
+test('API 오류면 오류 종류를 알려 준다', async ($, on) => {
+  on('command.register', () => ({ value: {} }) as never)
+  on('session.cwd', () => ({ value: '/tmp/project' }) as never)
+  on('model.complete', () => {
+    const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
+    return { value: { isAnswered: false, reason: 'api-error', status: 429, error: 'rate_limit', usage } } as never
+  })
+
+  const r = await $.command.run({ command: 'bash-explain', args: 'git push --force' } as never)
+  expect(r.text).toContain('(해설 요청이 실패해 사전 검사 결과만 보여요 · rate_limit 429)')
+})

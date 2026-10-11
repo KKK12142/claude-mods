@@ -63,12 +63,17 @@ const explain = async ($: EngineInterface, cfg: Config, call: Call): Promise<Res
       maxTokens: 3_000,
       timeoutMs,
     })
-    if (!reply.isAnswered) return { ...base, failure: reply.reason === 'aborted' ? 'timeout' : 'error' }
+    if (!reply.isAnswered) {
+      if (reply.reason === 'aborted') return { ...base, failure: 'timeout' }
+      if (reply.reason === 'api-error') return { ...base, failure: 'api', failureDetail: `${reply.error}${reply.status ? ` ${reply.status}` : ''}` }
+      return { ...base, failure: 'format' }
+    }
     const explanation = parse(reply.text)
-    if (explanation === undefined) return { ...base, failure: 'error' }
+    if (explanation === undefined) return { ...base, failure: 'format' }
     return { ...base, explanation, risk: combine(hits, explanation) }
   } catch {
-    return { ...base, failure: 'error' }
+    // 엔진이 요청을 보내지 않음: 모델 이름이 틀렸거나 막힌 모델
+    return { ...base, failure: 'model' }
   }
 }
 

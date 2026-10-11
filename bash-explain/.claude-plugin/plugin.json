@@ -1,6 +1,6 @@
 {
   "name": "bash-explain",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Explains in Korean the shell command a permission dialog asks about: what it does, what it changes and how risky it is",
   "author": {
     "name": "KKK12142"
@@ -10,8 +10,13 @@
     "model": {
       "type": "string",
       "title": "해설 모델",
-      "description": "일반 명령을 해설하는 모델",
-      "default": "claude-haiku-5-5"
+      "description": "일반 명령을 해설하는 모델 (haiku: 빠르고 가벼움)",
+      "default": "claude-haiku-5-5",
+      "options": [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5"
+      ]
     },
     "effort": {
       "type": "string",
@@ -29,8 +34,13 @@
     "dangerModel": {
       "type": "string",
       "title": "위험 명령 해설 모델",
-      "description": "사전 검사에서 위험(🔴)으로 잡힌 명령을 해설하는 모델",
-      "default": "claude-sonnet-5-5"
+      "description": "사전 검사에서 위험(🔴)으로 잡힌 명령을 해설하는 모델 (sonnet: 숨은 위험을 더 잘 잡음)",
+      "default": "claude-sonnet-5-5",
+      "options": [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5"
+      ]
     },
     "dangerEffort": {
       "type": "string",

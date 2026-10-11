@@ -10,7 +10,9 @@ export type Result = {
   risk: Risk | null
   explanation?: Explanation
   model?: string
-  failure?: 'timeout' | 'error'
+  // timeout: 시간 초과 / model: 모델 이름을 쓸 수 없음 / api: API 오류 / format: 답 형식이 다름
+  failure?: 'timeout' | 'model' | 'api' | 'format'
+  failureDetail?: string
   timeoutMs: number
 }
 
@@ -90,10 +92,20 @@ export const prettyModel = (raw: string) => {
   return m ? `${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}` : raw
 }
 
-const failureNote = (r: Result) =>
-  r.failure === 'timeout'
-    ? `(해설이 ${Math.round(r.timeoutMs / 1000)}초 안에 오지 않아 사전 검사 결과만 보여요)`
-    : '(해설을 받지 못해 사전 검사 결과만 보여요)'
+const failureNote = (r: Result) => {
+  switch (r.failure) {
+    case 'timeout':
+      return `(해설이 ${Math.round(r.timeoutMs / 1000)}초 안에 오지 않아 사전 검사 결과만 보여요)`
+    case 'model':
+      return `(해설 모델 '${r.model}'을 쓸 수 없어 사전 검사 결과만 보여요 · /config의 bash-explain에서 모델을 확인하세요)`
+    case 'api':
+      return `(해설 요청이 실패해 사전 검사 결과만 보여요 · ${r.failureDetail ?? 'API 오류'})`
+    case 'format':
+      return '(해설 형식이 맞지 않아 사전 검사 결과만 보여요)'
+    default:
+      return '(해설을 받지 못해 사전 검사 결과만 보여요)'
+  }
+}
 
 // 확인 창 위 Bash 줄에 그릴 해설
 export const toNote = (r: Result): Note | undefined => {
