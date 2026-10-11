@@ -14,6 +14,24 @@
       "name": "prism-tree",
       "source": "./prism-tree",
       "description": "Themed file tree in the sidebar: git status, lines changed and a shimmer on files Claude touches, in six color presets"
+    },
+    {
+      "name": "korean-ui",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/KKK12142/korean-ui.git",
+        "path": "plugins/korean-ui"
+      },
+      "description": "Claude Code의 명령어 설명과 /config 설정 항목을 한국어로 표시 (fork of KimSuro5773/korean-ui)"
+    },
+    {
+      "name": "terminal-browser",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/KKK12142/terminal-browser.git",
+        "path": "claude-code-plugin"
+      },
+      "description": "A real browser in a split pane beside Claude; ctrl+g sends a page element to the prompt (fork of zenbu-labs/terminal-browser)"
     }
   ]
 }
