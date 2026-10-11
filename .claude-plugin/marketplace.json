@@ -16,6 +16,11 @@
       "description": "Themed file tree in the sidebar: git status, lines changed and a shimmer on files Claude touches, in six color presets"
     },
     {
+      "name": "bash-explain",
+      "source": "./bash-explain",
+      "description": "Explains in Korean the shell command a permission dialog asks about: what each part does, what it changes and how risky it is"
+    },
+    {
       "name": "korean-ui",
       "source": {
         "source": "git-subdir",
