@@ -1,4 +1,5 @@
-import type { Note, Risk } from '../types'
+import type { Impact, Note, Risk } from '../types'
+import { describeImpact, moreText } from './radius'
 import { maxRisk } from './rules'
 import type { Hit } from './rules'
 
@@ -23,6 +24,7 @@ export const SYSTEM = `너는 터미널 명령어 해설가다. 코딩 AI(Claude
 - 위험도는 최악의 경우를 기준으로 정한다. 안전하다고 단정하지 마라.
 - 모르는 프로그램이나 스크립트는 모른다고 쓰고, 짐작은 짐작이라고 써라.
 - 사전 검사 결과는 글자만 보고 찾은 것이라 틀릴 수 있다. 참고만 해라.
+- 실제 영향(직접 측정한 사실)이 주어지면 그 숫자와 목록을 사실로 삼아 해설해라. 측정과 어긋나는 짐작은 하지 마라. 측정이 "재지 못함"이면 무엇을 모르는지 밝혀라.
 - 옵션(-r, --force, /s 등)은 괄호 안에 뜻을 풀어 써라.
 - 아래 형식만 출력한다. 인사말, 마크다운 제목, 코드 블록, 백틱은 쓰지 마라.
 
@@ -41,7 +43,7 @@ export const SYSTEM = `너는 터미널 명령어 해설가다. 코딩 AI(Claude
 
 const MAX_COMMAND = 6000
 
-export const buildPrompt = (p: { command: string; shell: string; cwd: string; description?: string; hits: Hit[] }) => {
+export const buildPrompt = (p: { command: string; shell: string; cwd: string; description?: string; hits: Hit[]; impact?: Impact }) => {
   const shell = p.shell === 'PowerShell' ? 'PowerShell (Windows)' : 'bash (macOS·Linux, 윈도우에서는 Git Bash)'
   const command =
     p.command.length > MAX_COMMAND ? `${p.command.slice(0, MAX_COMMAND)}\n…(뒤 ${p.command.length - MAX_COMMAND}자 생략)` : p.command
@@ -52,6 +54,7 @@ export const buildPrompt = (p: { command: string; shell: string; cwd: string; de
     `현재 폴더: ${p.cwd || '알 수 없음'}`,
     `Claude가 적은 목적: ${p.description?.trim() || '없음'}`,
     `사전 검사 결과: ${hits}`,
+    ...(p.impact ? [`실제 영향(직접 측정한 사실):\n${describeImpact(p.impact)}`] : []),
     '<command>',
     command,
     '</command>',
@@ -107,11 +110,23 @@ const failureNote = (r: Result) => {
   }
 }
 
+// 측정은 끝났고 해설은 아직: 실제 영향부터 보여 준다
+export const pendingNote = (hits: Hit[], impact: Impact): Note => ({
+  risk: combine(hits),
+  title: '해설 만드는 중…',
+  parts: [],
+  warnings: [],
+  footer: 'bash-explain',
+  impact,
+  isPending: true,
+})
+
 // 확인 창 위 Bash 줄에 그릴 해설
-export const toNote = (r: Result): Note | undefined => {
+export const toNote = (r: Result, impact?: Impact): Note | undefined => {
   const ex = r.explanation
   if (ex !== undefined) {
     return {
+      impact,
       risk: r.risk,
       title: ex.summary ?? '이 명령이 하는 일',
       parts: ex.parts,
@@ -130,14 +145,22 @@ export const toNote = (r: Result): Note | undefined => {
       footer: `bash-explain · ${prettyModel(r.model ?? '')}`,
     }
   }
-  if (r.hits.length === 0) return undefined
-  return { risk: r.risk, title: '사전 검사 결과', parts: r.hits.map(h => h.label), warnings: [], footer: failureNote(r) }
+  if (r.hits.length === 0 && impact === undefined) return undefined
+  return { risk: r.risk, title: '사전 검사 결과', parts: r.hits.map(h => h.label), warnings: [], footer: failureNote(r), impact }
 }
 
 // 글로 쓴 해설 (/bash-explain 미리 보기)
 export const formatText = (note: Note): string =>
   [
     `${badge(note.risk)} · ${note.title}`,
+    ...(note.impact
+      ? [
+          `  📦 실제 영향: ${note.impact.summary}`,
+          ...note.impact.lines.map(l => `       ${l}`),
+          ...(note.impact.more > 0 ? [`       ${moreText(note.impact.more)}`] : []),
+          ...(note.impact.note ? [`       (${note.impact.note})`] : []),
+        ]
+      : []),
     ...note.parts.map(part => `  · ${part}`),
     ...note.warnings.map(w => `  ! ${w}`),
     ...(note.why ? [`  왜: ${note.why}`] : []),

@@ -1,7 +1,7 @@
 {
   "name": "bash-explain",
-  "version": "0.1.2",
-  "description": "Explains in Korean the shell command a permission dialog asks about: what it does, what it changes and how risky it is",
+  "version": "0.2.0",
+  "description": "Explains in Korean the shell command a permission dialog asks about, with what it would actually delete or discard (adapted from blast-radius), and asks before a risky loss in auto mode",
   "author": {
     "name": "KKK12142"
   },
@@ -54,6 +54,12 @@
         "max"
       ],
       "default": "medium"
+    },
+    "autoHold": {
+      "type": "boolean",
+      "title": "auto mode에서 위험한 손실은 묻기",
+      "description": "auto mode에서 rm -rf, git reset --hard, git clean, 강제 push가 실제로 무언가를 지우거나 버릴 때 확인 창을 띄움",
+      "default": true
     }
   }
 }

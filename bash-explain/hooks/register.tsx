@@ -1,9 +1,10 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { ElementTable, EngineInterface, ModelEffort, Register } from 'claude-code'
 
-import type { Note } from '../types'
-import { badge, buildPrompt, combine, formatText, parse, prettyModel, SYSTEM, toNote } from './explain'
+import type { Impact, Note } from '../types'
+import { badge, buildPrompt, combine, formatText, parse, pendingNote, prettyModel, SYSTEM, toNote } from './explain'
 import type { Result } from './explain'
+import { classify, measure, moreText } from './radius'
 import { scan } from './rules'
 
 const isOff = atom({ plugin: 'bash-explain', key: 'isOff' } as const, false)
@@ -28,7 +29,7 @@ const field = (input: unknown, key: string) => {
 const asEffort = (value: unknown, fallback: ModelEffort) =>
   EFFORTS.includes(value as ModelEffort) ? (value as ModelEffort) : fallback
 
-type Config = { model: string; effort: ModelEffort; dangerModel: string; dangerEffort: ModelEffort }
+type Config = { model: string; effort: ModelEffort; dangerModel: string; dangerEffort: ModelEffort; autoHold: boolean }
 
 const readConfig = (options: Readonly<Record<string, unknown>>): Config => ({
   model: typeof options.model === 'string' && options.model.trim() ? options.model.trim() : 'claude-haiku-5-5',
@@ -36,6 +37,7 @@ const readConfig = (options: Readonly<Record<string, unknown>>): Config => ({
   dangerModel:
     typeof options.dangerModel === 'string' && options.dangerModel.trim() ? options.dangerModel.trim() : 'claude-sonnet-5-5',
   dangerEffort: asEffort(options.dangerEffort, 'medium'),
+  autoHold: options.autoHold !== false,
 })
 
 type Call = { command: string; shell: string; description?: string }
@@ -46,10 +48,28 @@ const cache = new Map<string, Promise<Result>>()
 const calls = new Map<string, Call>()
 // 해설을 이미 시작한 호출
 const started = new Set<string>()
+// 호출마다 잰 실제 영향 (auto mode에서 붙잡을지 정할 때와 해설에 함께 쓴다)
+const impacts = new Map<string, Promise<Impact | undefined>>()
 
-const explain = async ($: EngineInterface, cfg: Config, call: Call): Promise<Result> => {
+// 실제 영향: rm -r/-f, git reset --hard, checkout/restore ., git clean, push --force만 잰다
+const impactFor = ($: EngineInterface, key: string, call: Call): Promise<Impact | undefined> => {
+  const hit = impacts.get(key)
+  if (hit !== undefined) return hit
+  const target = call.shell === 'Bash' ? classify(call.command) : null
+  const made =
+    target === null
+      ? Promise.resolve(undefined)
+      : $.session
+          .cwd()
+          .catch(() => '')
+          .then(cwd => measure((argv, init) => $.process.run(argv, init), target, cwd))
+  impacts.set(key, made)
+  return made
+}
+
+const explain = async ($: EngineInterface, cfg: Config, call: Call, impact?: Impact): Promise<Result> => {
   const hits = scan(call.command)
-  const isDanger = hits.some(h => h.risk === 'high')
+  const isDanger = hits.some(h => h.risk === 'high') || impact?.isLoss === true
   const model = isDanger ? cfg.dangerModel : cfg.model
   const timeoutMs = isDanger ? DANGER_TIMEOUT_MS : TIMEOUT_MS
   const base: Result = { hits, risk: combine(hits), model, timeoutMs }
@@ -59,7 +79,7 @@ const explain = async ($: EngineInterface, cfg: Config, call: Call): Promise<Res
       model,
       effort: isDanger ? cfg.dangerEffort : cfg.effort,
       system: SYSTEM,
-      prompt: buildPrompt({ ...call, cwd, hits }),
+      prompt: buildPrompt({ ...call, cwd, hits, impact }),
       maxTokens: 3_000,
       timeoutMs,
     })
@@ -77,11 +97,12 @@ const explain = async ($: EngineInterface, cfg: Config, call: Call): Promise<Res
   }
 }
 
-const explainCached = ($: EngineInterface, cfg: Config, call: Call) => {
-  const key = `${call.shell}\u0000${call.command}`
+const explainCached = ($: EngineInterface, cfg: Config, call: Call, impact?: Impact) => {
+  // 같은 명령이라도 잰 영향이 다르면 해설도 달라진다
+  const key = `${call.shell}\u0000${call.command}\u0000${impact?.summary ?? ''}`
   const hit = cache.get(key)
   if (hit !== undefined) return hit
-  const made = explain($, cfg, call)
+  const made = explain($, cfg, call, impact)
   cache.set(key, made)
   // 실패한 해설은 다음에 다시 시도한다
   void made.then(r => {
@@ -91,14 +112,17 @@ const explainCached = ($: EngineInterface, cfg: Config, call: Call) => {
   return made
 }
 
-// 해설을 만들어 그 호출의 Bash 줄에 그린다. 기다리지 않고 뒤에서 돈다
+// 재고, 해설을 만들어 그 호출의 Bash 줄에 그린다. 기다리지 않고 뒤에서 돈다
 const prepare = async ($: EngineInterface, cfg: Config, id: string) => {
   const call = calls.get(id)
   if (call === undefined || started.has(id)) return
   started.add(id)
-  const result = await explainCached($, cfg, call)
-  const note = toNote(result)
-  if (note !== undefined) await update($, memberOf(notes, { requestId: id }), () => note)
+  const at = memberOf(notes, { requestId: id })
+  // 측정은 보통 1초 안에 끝나니 실제 영향부터 보여 주고, 해설은 그 사실을 바탕으로 만든다
+  const impact = await impactFor($, id, call)
+  if (impact !== undefined) await update($, at, () => pendingNote(scan(call.command), impact))
+  const note = toNote(await explainCached($, cfg, call, impact), impact)
+  if (note !== undefined) await update($, at, () => note)
 }
 
 // 아직 결과가 없는 호출: 허락을 기다리는 중(isRunning은 아직 false)이거나 실행 중
@@ -117,10 +141,17 @@ const noteView = (t: ElementTable, note: Note, isFull: boolean) => {
       <Text bold> · {note.title}</Text>
     </Text>
   )
-  if (!isFull) return <Box paddingLeft={5}>{head}</Box>
+  if (!isFull) {
+    return (
+      <Box paddingLeft={5} flexDirection="row" gap={2}>
+        {head}
+        {note.impact && <Text dimColor>📦 {note.impact.summary}</Text>}
+      </Box>
+    )
+  }
 
   // 표시 기호와 글을 나눠 두면 긴 글이 다음 줄로 넘어가도 글 시작 위치에 맞춰진다
-  const line = (mark: string, text: string, style: { color?: 'error' | 'warning'; dimColor?: boolean } = {}) => (
+  const line = (mark: string, text: string, style: { color?: 'error' | 'warning'; dimColor?: boolean; bold?: boolean } = {}) => (
     <Box flexDirection="row">
       <Text {...style}>{mark}</Text>
       <Box flexShrink={1}>
@@ -128,15 +159,20 @@ const noteView = (t: ElementTable, note: Note, isFull: boolean) => {
       </Box>
     </Box>
   )
+  const impact = note.impact
 
   return (
     <Box flexDirection="column" paddingLeft={5} marginTop={1}>
       {head}
+      {impact && line('  📦 ', `실제 영향: ${impact.summary}`, impact.isLoss === true ? { color: 'error', bold: true } : { bold: true })}
+      {impact?.lines.map(l => line('       ', l, { dimColor: true }))}
+      {impact && impact.more > 0 && line('       ', moreText(impact.more), { dimColor: true })}
+      {impact?.note && line('       ', `(${impact.note})`, { dimColor: true })}
       {note.parts.map(part => line('  · ', part))}
       {note.warnings.map(w => line('  ! ', w, { color: 'error' }))}
       {note.why && line('  왜: ', note.why, { dimColor: true })}
       {note.caution && line('  ⚠ ', note.caution, { color: 'warning' })}
-      {line('  ─ ', note.footer, { dimColor: true })}
+      {line('  ─ ', note.isPending ? '해설 만드는 중…' : note.footer, { dimColor: true })}
     </Box>
   )
 }
@@ -151,7 +187,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'bash-explain',
-      description: '권한 확인 창의 셸 명령을 한글로 해설합니다 (on / off / <명령어>로 미리 보기)',
+      description: '권한 확인 창의 셸 명령을 한글로 해설하고 실제 영향을 보여 줍니다 (on / off / <명령어>로 미리 보기)',
       argumentHint: 'on | off | <명령어>',
     })
 
@@ -187,8 +223,25 @@ export const register: Register = (on, options) => {
       if (id !== undefined) {
         calls.delete(id)
         started.delete(id)
+        impacts.delete(id)
       }
     }
+  })
+
+  // auto mode: 분류기가 조용히 허락할 수도 있는 위험 명령은 실제로 잃을 것이 있으면 확인 창을 띄운다
+  on('classic.PreToolUse', async ($, e, next) => {
+    const decided = await next(e)
+    if (decided.allow !== undefined || decided.ask !== undefined || decided.deny !== undefined) return decided
+    const id = e.tool_use_id
+    const call = id === undefined ? undefined : calls.get(id)
+    if (!cfg.autoHold || id === undefined || call === undefined || call.shell !== 'Bash') return decided
+    if ((await read($, mode)) !== 'auto' || (await read($, isOff))) return decided
+    const impact = await impactFor($, id, call)
+    // 지울 것이 없거나 임시 폴더뿐이면 붙잡지 않는다. 재지 못했으면 안전하게 묻는다
+    if (impact === undefined || impact.isLoss === false) return decided
+    void prepare($, cfg, id)
+
+    return { ...decided, ask: `bash-explain: ${impact.summary}. 위의 해설을 보고 정하세요` }
   })
 
   // 확인 창이 뜰 것이 확실하면(auto mode가 아닌데 ask) 미리 해설을 시작한다. 판정은 바꾸지 않는다
@@ -260,13 +313,18 @@ export const register: Register = (on, options) => {
       const off = await read($, isOff)
       return {
         text: [
-          `bash-explain ${off ? '꺼짐' : '켜짐'} · 일반 명령: ${prettyModel(cfg.model)} (${cfg.effort}) · 위험 명령: ${prettyModel(cfg.dangerModel)} (${cfg.dangerEffort})`,
-          '사용법: /bash-explain on | off | <명령어> (명령어를 주면 실행하지 않고 해설만 보여 줌)',
+          `bash-explain ${off ? '꺼짐' : '켜짐'} · 일반 명령: ${prettyModel(cfg.model)} (${cfg.effort}) · 위험 명령: ${prettyModel(cfg.dangerModel)} (${cfg.dangerEffort}) · auto mode 붙잡기: ${cfg.autoHold ? '켜짐' : '꺼짐'}`,
+          '사용법: /bash-explain on | off | <명령어> (명령어를 주면 실행하지 않고 지금 폴더 기준 실제 영향과 해설만 보여 줌)',
         ].join('\n'),
       }
     }
 
-    const note = toNote(await explainCached($, cfg, { command: arg, shell: 'Bash' }))
+    // 미리 보기도 지금 폴더에서 실제 영향을 잰다 (읽기만 함)
+    const call = { command: arg, shell: 'Bash' }
+    const key = `preview\u0000${arg}`
+    const impact = await impactFor($, key, call)
+    impacts.delete(key)
+    const note = toNote(await explainCached($, cfg, call, impact), impact)
     return { text: note === undefined ? '해설을 만들지 못했어요 (사전 검사에도 걸린 것이 없음)' : formatText(note) }
   })
 }

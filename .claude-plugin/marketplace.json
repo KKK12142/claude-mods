@@ -18,7 +18,7 @@
     {
       "name": "bash-explain",
       "source": "./bash-explain",
-      "description": "Explains in Korean the shell command a permission dialog asks about: what each part does, what it changes and how risky it is"
+      "description": "Explains in Korean the shell command a permission dialog asks about, with what it would actually delete or discard, and asks before a risky loss in auto mode (adapted from blast-radius)"
     },
     {
       "name": "korean-ui",
