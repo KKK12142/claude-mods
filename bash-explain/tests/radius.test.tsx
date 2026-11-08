@@ -99,11 +99,20 @@ test('윈도우에서는 파일 측정을 하지 않고, 실행기가 실패하�
 const REPLY = '위험도: 높음\n요약: build 폴더 삭제\n- rm -rf build → build 폴더를 통째로 삭제'
 const USAGE = { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
 
-const engine = (on: On, rmOutput: string) => {
+// 붙잡으면(ask) 엔진이 classic.PermissionRequest를 올린다. 사람 대신 허락해 호출이 끝까지 가게 하고 횟수를 센다
+let asked = 0
+
+const engine = (on: On, rmOutput: string, guardAt?: string) => {
   let id = ''
+  asked = 0
   on('command.register', () => ({ value: {} }) as never)
   on('session.cwd', () => ({ value: '/Users/me/proj' }) as never)
   on('classic.UserPromptSubmit', () => ({}))
+  on('classic.PermissionRequest', () => {
+    asked += 1
+    return { decision: { behavior: 'allow' } } as never
+  })
+  on('fs.exists', (_$, e) => ({ value: e.path === guardAt }) as never)
   on('process.run', () => ({ value: { ...ok(rmOutput), isStdoutTruncated: false, isStderrTruncated: false } }) as never)
   on('model.complete', () => ({ value: { isAnswered: true, text: REPLY, usage: USAGE } }) as never)
   on('ui.render', ($, e) => {
@@ -144,6 +153,7 @@ test('auto mode: 실제로 잃을 것이 있으면 확인 창을 띄우게 하�
     if (!drawn) await engine$.command.run({ command: 'bash-explain', args: '' } as never)
   }
   expect(drawn).toBe(true)
+  expect(asked).toBe(1)
 })
 
 test('auto mode: 임시 폴더뿐이면 붙잡지 않는다', async (engine$, on) => {
@@ -154,6 +164,7 @@ test('auto mode: 임시 폴더뿐이면 붙잡지 않는다', async (engine$, on
 
   const ui = await engine$.ui.mount(ROW(idOf()))
   expect(await ui.find({ type: 'Text', text: '🔴 위험' })).toBeUndefined()
+  expect(asked).toBe(0)
   await ui.unmount()
 })
 
@@ -165,5 +176,18 @@ test('auto mode 붙잡기를 끄면 붙잡지 않는다', { options: { autoHold:
 
   const ui = await engine$.ui.mount(ROW(idOf()))
   expect(await ui.find({ type: 'Text', text: '🔴 위험' })).toBeUndefined()
+  expect(asked).toBe(0)
+  await ui.unmount()
+})
+
+test('auto mode: 저장소에 guard 훅이 있으면(세션 폴더 위쪽이어도) 판정을 맡기고 붙잡지 않는다', async (engine$, on) => {
+  const idOf = engine(on, LOSS, '/Users/me/.claude/hooks/guard.mjs')
+  await engine$.classic.UserPromptSubmit({ prompt: 'build 지워 줘', permission_mode: 'auto' } as never)
+  await engine$.tool.call({ tool: 'Bash', command: 'rm -rf build' } as never)
+  for (let i = 0; i < 5; i++) await engine$.command.run({ command: 'bash-explain', args: '' } as never)
+
+  const ui = await engine$.ui.mount(ROW(idOf()))
+  expect(await ui.find({ type: 'Text', text: '🔴 위험' })).toBeUndefined()
+  expect(asked).toBe(0)
   await ui.unmount()
 })

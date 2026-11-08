@@ -1,6 +1,6 @@
 {
   "name": "bash-explain",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Explains in Korean the shell command a permission dialog asks about, with what it would actually delete or discard (adapted from blast-radius), and asks before a risky loss in auto mode",
   "author": {
     "name": "KKK12142"

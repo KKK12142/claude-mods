@@ -181,6 +181,24 @@ const noteMode = async ($: EngineInterface, permissionMode: string | undefined) 
   if (permissionMode) await update($, mode, () => permissionMode)
 }
 
+// 저장소에 막고 묻는 훅(guard.mjs)이 있으면 판정은 그 훅에 맡긴다. 세션 폴더부터 위로 올라가며 찾고, 찾지 못하면 전처럼 붙잡는다
+const REPO_GUARD = '.claude/hooks/guard.mjs'
+
+const hasRepoGuard = async ($: EngineInterface): Promise<boolean> => {
+  try {
+    let dir = await $.session.cwd()
+    while (dir) {
+      if (await $.fs.exists(`${dir}/${REPO_GUARD}`)) return true
+      const parent = dir.replace(/[\\/][^\\/]*$/, '')
+      if (parent === dir) break
+      dir = parent
+    }
+  } catch {
+    // 볼 수 없으면 안전한 쪽(붙잡기)으로 둔다
+  }
+  return false
+}
+
 export const register: Register = (on, options) => {
   const cfg = readConfig(options)
 
@@ -236,6 +254,7 @@ export const register: Register = (on, options) => {
     const call = id === undefined ? undefined : calls.get(id)
     if (!cfg.autoHold || id === undefined || call === undefined || call.shell !== 'Bash') return decided
     if ((await read($, mode)) !== 'auto' || (await read($, isOff))) return decided
+    if (await hasRepoGuard($)) return decided
     const impact = await impactFor($, id, call)
     // 지울 것이 없거나 임시 폴더뿐이면 붙잡지 않는다. 재지 못했으면 안전하게 묻는다
     if (impact === undefined || impact.isLoss === false) return decided
