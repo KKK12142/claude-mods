@@ -21,6 +21,11 @@
       "description": "Explains in Korean the shell command a permission dialog asks about, with what it would actually delete or discard, and asks before a risky loss in auto mode (adapted from blast-radius)"
     },
     {
+      "name": "lead-board",
+      "source": "./lead-board",
+      "description": "A side pane for the lead session: each session's progress and the files it is editing, prompt cache time left, open rows of the request ledger, and usage"
+    },
+    {
       "name": "korean-ui",
       "source": {
         "source": "git-subdir",

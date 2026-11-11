@@ -11,6 +11,7 @@ Claude Code 터미널 세션에서 저장소를 한 번 추가한 뒤, 원하는
 /plugin install usage-meter@claude-mods
 /plugin install prism-tree@claude-mods
 /plugin install bash-explain@claude-mods
+/plugin install lead-board@claude-mods
 /plugin install korean-ui@claude-mods
 ```
 
@@ -23,6 +24,7 @@ Claude Code 터미널 세션에서 저장소를 한 번 추가한 뒤, 원하는
 | `usage-meter` | 입력창 위 한 줄에 모델·effort·컨텍스트·5시간 한도를 막대로 표시. 화면 폭에 맞춰 줄어듦. `/usage-meter on/off`로 켜고 끔 |
 | `prism-tree` | 오른쪽 사이드바 파일 트리. git 상태·바뀐 줄 수를 보여 주고 Claude가 건드린 파일을 반짝임으로 표시. 테마 6종, 머리줄 `❖` 버튼으로 전환. `/prism-tree`로 열기, `/prism-tree on/off`로 켜고 끔 ([자세히](prism-tree/README.md)) |
 | `bash-explain` | 셸 명령 확인 창이 뜨면 창 바로 위에 그 명령을 한글로 해설하고, `rm -rf`·`git reset --hard`·`git clean`·강제 push가 **실제로 지울 파일 수·크기, 버릴 변경, 사라질 커밋**을 미리 재서 보여 줌. auto mode에서도 실제로 잃을 게 있으면 확인 창을 띄움. 위험도(🔴🟡🟢), Haiku/Sonnet 해설, Bash·PowerShell 지원. `/bash-explain <명령어>`로 미리 보기 ([자세히](bash-explain/README.md), 측정은 Anthropic [blast-radius](https://github.com/anthropics/claude-code-playground/tree/main/claude-code/mods/blast-radius) 기반) |
+| `lead-board` | 대장 세션 오른쪽 칸에 살아 있는 세션마다 진행 상태(작업 중·확인 필요·쉼)와 최근 30분 동안 고친 파일, 프롬프트 캐시 남은 시간, 요청 원장(`memory/ax-science-request-ledger.md`)의 열린 일, 컨텍스트·사용량을 보여 줌. 세션 이름이 `대장`이면 저절로 열리고, 다른 세션에서는 `/lead-board`로 열기 |
 | `korean-ui` | 명령어 설명과 `/config` 항목을 한국어로 표시. [KimSuro5773/korean-ui](https://github.com/KimSuro5773/korean-ui)의 포크 [KKK12142/korean-ui](https://github.com/KKK12142/korean-ui) |
 | `terminal-browser` | Claude 옆 분할 창에 실제 브라우저를 띄우고 `ctrl+g`로 고른 요소를 입력창에 보냄. `/browser`로 열기. [zenbu-labs/terminal-browser](https://github.com/zenbu-labs/terminal-browser)의 포크 [KKK12142/terminal-browser](https://github.com/KKK12142/terminal-browser) |
 
