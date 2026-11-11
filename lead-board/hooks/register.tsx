@@ -6,6 +6,8 @@ const PANE = 'lead-board'
 const TITLE = '대장 현황'
 const LEAD_NAME = '대장'
 const LEDGER_FILE = 'memory/ax-science-request-ledger.md'
+/** $.store에 남기는 켜짐·꺼짐. 끄면 새 세션에서도 /lead-board on 전까지 저절로 열리지 않는다. */
+const ENABLED_STORE = 'enabled'
 const POLL_MS = 10_000
 const TAIL_BYTES = 400_000
 const HIT_TURNS = 20
@@ -430,19 +432,36 @@ const TASK_MARK = {
 // 엔진이 터미널 폭의 45%로 자르므로 넉넉히 요청해 언제나 상한까지 쓴다.
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: TITLE, columns: 200 })
 
+const isEnabled = async ($: EngineInterface): Promise<boolean> => {
+  try {
+    return (await $.store.get(ENABLED_STORE)) !== false
+  } catch {
+    return true
+  }
+}
+
+const setEnabled = async ($: EngineInterface, on: boolean): Promise<void> => {
+  try {
+    await $.store.set(ENABLED_STORE, on)
+  } catch {
+    // 저장하지 못하면 이 세션에서만 따른다.
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    await $.command.register({ name: 'lead-board', description: '대장 현황 패널을 엽니다' })
+    await $.command.register({ name: 'lead-board', description: '대장 현황 패널을 열고 닫습니다. 인자: on | off' })
     $.clock.every(POLL_MS, () => {
       void (async () => {
         const up = (await $.ui.panes()).some(pane => pane.id === PANE)
         if (up) await refresh($)
       })()
     })
-    // 세션 이름은 시작 직후에야 파일에 적히므로 조금 기다린다. 대장 세션에서만 저절로 연다.
+    // 세션 이름은 시작 직후에야 파일에 적히므로 조금 기다린다. 대장 세션에서만, 꺼 두지 않았을 때만 저절로 연다.
     $.clock.after(3000, () => {
       void (async () => {
+        if (!(await isEnabled($))) return
         const [home, selfId] = await Promise.all([homeOf($), $.session.id()])
         const files = await liveSessions($, home).catch(() => [] as SessionFile[])
         if (files.find(f => f.sessionId === selfId)?.name !== LEAD_NAME) return
@@ -453,7 +472,17 @@ export const register: Register = on => {
     return result
   })
 
-  on('command.run', { command: 'lead-board' }, async $ => {
+  on('command.run', { command: 'lead-board' }, async ($, e) => {
+    const word = (e.args ?? '').trim().toLowerCase()
+    if (word === 'off') {
+      await setEnabled($, false)
+      await $.ui.close({ id: PANE }).catch(() => undefined)
+      return { text: '대장 현황을 닫았습니다. /lead-board on을 치기 전까지 새 세션에서도 저절로 열리지 않습니다.' }
+    }
+    if (word !== '' && word !== 'on') {
+      return { text: '/lead-board 뒤에는 on 또는 off만 씁니다. 아무것도 쓰지 않으면 엽니다.' }
+    }
+    await setEnabled($, true)
     const { isPlaced } = await openPane($)
     await refresh($)
     return {

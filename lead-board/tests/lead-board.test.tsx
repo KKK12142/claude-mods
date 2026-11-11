@@ -167,3 +167,32 @@ test('컨텍스트를 /context의 종류별 색으로 채우고 지연 로드 �
   expect(segments[4]?.text[0]).toBe('╌')
   await ui.unmount()
 })
+
+test('/lead-board off는 칸을 닫고 꺼짐을 남기며, 모르는 말은 그대로 두고, on은 다시 켜고 연다', async ($, on) => {
+  stubs(on)
+  const stored: Record<string, unknown> = {}
+  const closed: string[] = []
+  on('store.get', (_: unknown, e: { key: string }) => ({ value: stored[e.key] }))
+  on('store.set', (_: unknown, e: { key: string; value: unknown }) => {
+    stored[e.key] = e.value
+    return { value: undefined }
+  })
+  on('ui.close', (_: unknown, e: { id: string }) => {
+    closed.push(e.id)
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
+
+  const off: any = await $.command.run({ command: 'lead-board', args: 'off' } as never)
+  expect(off.text).toContain('닫았습니다')
+  expect(closed).toEqual(['lead-board'])
+  expect(stored.enabled).toBe(false)
+
+  const unknown: any = await $.command.run({ command: 'lead-board', args: 'dark' } as never)
+  expect(unknown.text).toContain('on 또는 off')
+  expect(stored.enabled).toBe(false)
+
+  const back: any = await $.command.run({ command: 'lead-board', args: 'on' } as never)
+  expect(back.text).toContain('열었습니다')
+  expect(stored.enabled).toBe(true)
+})
